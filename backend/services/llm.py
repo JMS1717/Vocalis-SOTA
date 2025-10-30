@@ -51,7 +51,7 @@ class LLMClient:
         self.is_processing = False
         self.conversation_history = []
         
-        logger.info(f"Initialized LLM Client with endpoint={api_endpoint}")
+        logger.info("Initialized LLM client endpoint=%s", api_endpoint)
         
     def add_to_history(self, role: str, content: str) -> None:
         """
@@ -133,17 +133,21 @@ class LLMClient:
             
             # Log the full payload (truncated for readability)
             payload_str = json.dumps(payload)
-            logger.info(f"Sending request to LLM API with {len(messages)} messages")
+            logger.info("Sending request to LLM API with %d messages", len(messages))
             
             # Add more detailed logging to help debug message duplication
             message_roles = [msg["role"] for msg in messages]
             user_message_count = message_roles.count("user")
-            logger.info(f"Message roles: {message_roles}, user messages: {user_message_count}")
+            logger.debug(
+                "LLM payload roles=%s user_messages=%d",
+                message_roles,
+                user_message_count,
+            )
             
             if len(payload_str) > 500:
-                logger.debug(f"Payload (truncated): {payload_str[:500]}...")
+                logger.debug("Payload (truncated): %s...", payload_str[:500])
             else:
-                logger.debug(f"Payload: {payload_str}")
+                logger.debug("Payload: %s", payload_str)
             
             # Send request to LLM API
             response = requests.post(

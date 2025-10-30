@@ -170,6 +170,8 @@ class SpeechTranscriber:
             return "", {"error": str(exc)}
 
         finally:
+            self.model = None  # type: ignore[assignment]
+            self.processor = None  # type: ignore[assignment]
             self.is_processing = False
 
     def transcribe_streaming(self, audio_generator: Any):

@@ -9,8 +9,6 @@ from typing import Any, Dict, Generator, Optional
 
 import requests
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class TTSClient:
@@ -256,16 +254,19 @@ class TTSClient:
             # Calculate processing time
             self.last_processing_time = time.time() - start_time
             
-            logger.info(f"Received TTS response after {self.last_processing_time:.2f}s, "
-                       f"size: {len(audio_data)} bytes")
+            logger.info(
+                "Received TTS response after %.2fs size=%d bytes",
+                self.last_processing_time,
+                len(audio_data),
+            )
             
             return audio_data
             
         except requests.RequestException as e:
-            logger.error(f"TTS API request error: {e}")
+            logger.error("TTS API request error: %s", e)
             raise
         except Exception as e:
-            logger.error(f"TTS processing error: {e}")
+            logger.error("TTS processing error: %s", e, exc_info=True)
             raise
         finally:
             self.is_processing = False
@@ -309,13 +310,16 @@ class TTSClient:
 
             # Calculate processing time
             self.last_processing_time = time.time() - start_time
-            logger.info(f"Completed TTS streaming after {self.last_processing_time:.2f}s")
+            logger.info(
+                "Completed TTS streaming after %.2fs",
+                self.last_processing_time,
+            )
             
         except requests.RequestException as e:
-            logger.error(f"TTS API streaming request error: {e}")
+            logger.error("TTS API streaming request error: %s", e)
             raise
         except Exception as e:
-            logger.error(f"TTS streaming error: {e}")
+            logger.error("TTS streaming error: %s", e, exc_info=True)
             raise
         finally:
             self.is_processing = False
@@ -340,7 +344,7 @@ class TTSClient:
             audio_data = await asyncio.to_thread(self.text_to_speech, text)
             return audio_data
         except Exception as e:
-            logger.error(f"Async TTS error: {e}")
+            logger.error("Async TTS error: %s", e)
             raise
         finally:
             self.is_processing = False
@@ -365,6 +369,9 @@ class TTSClient:
             "speed": self.speed,
             "timeout": self.timeout,
             "chunk_size": self.chunk_size,
+            "provider": self.provider,
+            "inference_params": dict(self.inference_params),
+            "extra_headers": dict(self.extra_headers),
             "is_processing": self.is_processing,
-            "last_processing_time": self.last_processing_time
+            "last_processing_time": self.last_processing_time,
         }
