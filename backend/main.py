@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from . import config
 
 # Import services
-from .services.transcription import WhisperTranscriber
+from .services.transcription import SpeechTranscriber
 from .services.llm import LLMClient
 from .services.tts import TTSClient
 from .services.vision import vision_service
@@ -49,9 +49,12 @@ async def lifespan(app: FastAPI):
     global transcription_service, llm_service, tts_service
     
     # Initialize transcription service
-    transcription_service = WhisperTranscriber(
-        model_size=cfg["whisper_model"],
-        sample_rate=cfg["audio_sample_rate"]
+    transcription_service = SpeechTranscriber(
+        model_id=cfg["stt_model_id"],
+        device=cfg.get("stt_device"),
+        torch_dtype=cfg.get("stt_torch_dtype"),
+        sample_rate=cfg["audio_sample_rate"],
+        generation_config=cfg["stt_generation_config"],
     )
     
     # Initialize LLM service
@@ -64,7 +67,11 @@ async def lifespan(app: FastAPI):
         api_endpoint=cfg["tts_api_endpoint"],
         model=cfg["tts_model"],
         voice=cfg["tts_voice"],
-        output_format=cfg["tts_format"]
+        output_format=cfg["tts_format"],
+        provider=cfg["tts_provider"],
+        api_key=cfg["tts_api_key"],
+        inference_params=cfg["tts_inference_params"],
+        extra_headers=cfg["tts_extra_headers"],
     )
     
     # Initialize vision service (will download model if not cached)
@@ -78,9 +85,9 @@ async def lifespan(app: FastAPI):
     # Cleanup on shutdown
     logger.info("Shutting down services...")
     
-    # No specific cleanup needed for these services,
-    # but we could add resource release code here if needed (maybe in a future release lex 31/03/25)
-    
+    if tts_service:
+        tts_service.close()
+
     logger.info("Shutdown complete")
 
 # Create FastAPI application
@@ -128,7 +135,7 @@ async def health_check():
             "vision": vision_service.is_ready()
         },
         "config": {
-            "whisper_model": config.WHISPER_MODEL,
+            "stt_model_id": config.STT_MODEL_ID,
             "tts_voice": config.TTS_VOICE,
             "websocket_port": config.WEBSOCKET_PORT
         }
