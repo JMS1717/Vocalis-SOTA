@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import io
 import logging
 import time
-import wave
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Union
 
 import numpy as np
 import torch
@@ -99,88 +97,29 @@ class SpeechTranscriber:
             return torch.float16
         return torch.float32
 
-    def _normalize_audio(self, audio: np.ndarray) -> np.ndarray:
-        """Normalize numeric audio arrays to float32 in the [-1, 1] range."""
+    @staticmethod
+    def _normalize_audio(audio: np.ndarray) -> np.ndarray:
+        if audio.dtype == np.uint8:
+            audio = np.frombuffer(audio.tobytes(), dtype="<i2")
 
-        if audio.dtype == np.float32:
-            normalized = audio
-        elif audio.dtype == np.int16:
-            normalized = audio.astype(np.float32) / 32768.0
-        elif audio.dtype == np.int32:
-            normalized = audio.astype(np.float32) / 2147483648.0
+        if audio.dtype == np.int16:
+            audio = audio.astype(np.float32) / 32768.0
+        elif audio.dtype == np.float32:
+            pass
         else:
-            normalized = audio.astype(np.float32)
-            max_val = np.max(np.abs(normalized))
+            audio = audio.astype(np.float32)
+            max_val = np.max(np.abs(audio))
             if max_val > 0:
-                normalized /= max_val
+                audio /= max_val
 
-        if normalized.ndim > 1:
-            normalized = normalized.mean(axis=1)
+        return audio
 
-        return normalized.astype(np.float32, copy=False)
-
-    def _decode_wav_bytes(self, audio_bytes: Union[bytes, bytearray]) -> Tuple[np.ndarray, int]:
-        try:
-            with wave.open(io.BytesIO(audio_bytes), "rb") as wav_file:
-                sample_width = wav_file.getsampwidth()
-                channels = wav_file.getnchannels()
-                framerate = wav_file.getframerate()
-                frames = wav_file.readframes(wav_file.getnframes())
-        except wave.Error as exc:  # pragma: no cover - invalid input
-            raise ValueError("Unsupported or corrupted WAV data") from exc
-
-        if sample_width == 1:
-            data = np.frombuffer(frames, dtype=np.uint8)
-            data = data.astype(np.float32)
-            data = (data - 128.0) / 128.0
-        elif sample_width == 2:
-            data = np.frombuffer(frames, dtype="<i2").astype(np.float32) / 32768.0
-        elif sample_width == 4:
-            data = np.frombuffer(frames, dtype="<i4").astype(np.float32) / 2147483648.0
-        else:  # pragma: no cover - defensive coding for unusual widths
-            data = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-
-        if channels > 1:
-            data = data.reshape(-1, channels).mean(axis=1)
-
-        return data, framerate
-
-    def _resample_audio(self, audio: np.ndarray, original_rate: int) -> np.ndarray:
-        if original_rate == self.sample_rate or audio.size == 0:
-            return audio.astype(np.float32)
-
-        duration = audio.shape[0] / float(original_rate)
-        target_length = max(int(round(duration * self.sample_rate)), 1)
-
-        original_times = np.linspace(0.0, duration, num=audio.shape[0], endpoint=False, dtype=np.float32)
-        target_times = np.linspace(0.0, duration, num=target_length, endpoint=False, dtype=np.float32)
-
-        resampled = np.interp(target_times, original_times, audio.astype(np.float32))
-        return resampled.astype(np.float32)
-
-    def _prepare_audio(self, audio: Union[np.ndarray, bytes, bytearray]) -> np.ndarray:
-        if isinstance(audio, (bytes, bytearray)):
-            normalized, original_rate = self._decode_wav_bytes(audio)
-        elif isinstance(audio, np.ndarray):
-            if audio.dtype == np.uint8:
-                normalized, original_rate = self._decode_wav_bytes(audio.tobytes())  # pragma: no cover - legacy path
-            else:
-                normalized = self._normalize_audio(audio)
-                original_rate = self.sample_rate
-        else:  # pragma: no cover - defensive
-            raise TypeError("Unsupported audio input type")
-
-        if original_rate != self.sample_rate:
-            normalized = self._resample_audio(normalized, original_rate)
-
-        return normalized
-
-    def transcribe(self, audio: Union[np.ndarray, bytes, bytearray]) -> tuple[str, Dict[str, Any]]:
+    def transcribe(self, audio: np.ndarray) -> tuple[str, Dict[str, Any]]:
         start_time = time.time()
         self.is_processing = True
 
         try:
-            float_audio = np.ascontiguousarray(self._prepare_audio(audio), dtype=np.float32)
+            float_audio = self._normalize_audio(audio)
 
             inputs = self.processor(
                 audio=float_audio,
@@ -203,7 +142,7 @@ class SpeechTranscriber:
 
             generate_kwargs = dict(self.generation_config)
 
-            with torch.inference_mode():
+            with torch.no_grad():
                 generated_ids = self.model.generate(
                     input_features,
                     **generate_kwargs,
@@ -230,18 +169,6 @@ class SpeechTranscriber:
             logger.error("Transcription error: %s", exc, exc_info=True)
             return "", {"error": str(exc)}
 
-        finally:
-            self.is_processing = False
-
-    def close(self) -> None:
-        """Release model resources."""
-
-        try:
-            model = getattr(self, "model", None)
-            if model is not None:
-                model.to("cpu")
-            if torch.cuda.is_available():  # pragma: no cover - requires GPU
-                torch.cuda.empty_cache()
         finally:
             self.model = None  # type: ignore[assignment]
             self.processor = None  # type: ignore[assignment]

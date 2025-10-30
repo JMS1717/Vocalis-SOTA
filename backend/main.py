@@ -100,11 +100,6 @@ async def lifespan(app: FastAPI):
     
     if tts_service:
         tts_service.close()
-        tts_service = None
-
-    if transcription_service:
-        transcription_service.close()
-        transcription_service = None
 
     logger.info("Shutdown complete")
 
@@ -236,7 +231,7 @@ async def select_models(selection: ModelSelection):
                 updates["stt"] = transcription_service.get_config()
 
                 if old_transcriber is not None:
-                    old_transcriber.close()
+                    del old_transcriber
 
         if selection.tts_model_id:
             option = config.get_tts_option(selection.tts_model_id)

@@ -11,6 +11,8 @@ from typing import Dict, Any, List, Optional
 
 import requests
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class LLMClient:
@@ -170,10 +172,7 @@ class LLMClient:
             # Calculate processing time
             processing_time = time.perf_counter() - start_time
 
-            logger.info(
-                "Received response from LLM API after %.2fs",
-                processing_time,
-            )
+            logger.info(f"Received response from LLM API after {processing_time:.2f}s")
             
             return {
                 "text": assistant_message,
