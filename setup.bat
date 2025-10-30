@@ -27,7 +27,7 @@ if errorlevel 2 (
     echo === Installing with CUDA support ===
     python -m pip install -r backend\requirements.txt
     echo === Installing PyTorch with CUDA support ===
-    pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+    python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 )
 
 call :configure_hf_token
