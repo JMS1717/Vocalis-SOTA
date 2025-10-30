@@ -4,24 +4,23 @@ WebSocket Route Handler
 Handles WebSocket connections for bidirectional audio streaming.
 """
 
+import asyncio
+import base64
 import json
 import logging
-import asyncio
-import numpy as np
-import base64
 import os
-from typing import Dict, Any, List, Optional, AsyncGenerator
+from datetime import datetime
+from typing import AsyncGenerator, Dict, Any, List, Optional, Union
+
+import numpy as np
 from fastapi import WebSocket, WebSocketDisconnect, BackgroundTasks
 from pydantic import BaseModel
-from datetime import datetime
 
-from ..services.transcription import WhisperTranscriber
+from ..services.transcription import SpeechTranscriber
 from ..services.llm import LLMClient
 from ..services.tts import TTSClient
 from ..services.conversation_storage import ConversationStorage
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # WebSocket message types
@@ -66,7 +65,7 @@ class WebSocketManager:
     
     def __init__(
         self,
-        transcriber: WhisperTranscriber,
+        transcriber: SpeechTranscriber,
         llm_client: LLMClient,
         tts_client: TTSClient
     ):
@@ -218,11 +217,6 @@ class WebSocketManager:
             audio_data: Raw audio data
         """
         try:
-            # We're receiving WAV data, so we need to parse the WAV header
-            # WAV format: 44-byte header followed by PCM data
-            # Let whisper handle the WAV data directly - it can parse WAV headers
-            audio_array = np.frombuffer(audio_data, dtype=np.uint8)
-            
             # Interrupt any ongoing TTS playback
             if self.tts_client.is_processing:
                 logger.info("Interrupting TTS playback due to new speech")
@@ -238,7 +232,7 @@ class WebSocketManager:
             # Process the audio segment in a background task
             # Whisper will handle voice activity detection internally
             self.current_audio_task = asyncio.create_task(
-                self._process_speech_segment(websocket, audio_array)
+                self._process_speech_segment(websocket, audio_data)
             )
             
             # Send processing status update
@@ -250,7 +244,11 @@ class WebSocketManager:
             logger.error(f"Error processing audio: {e}")
             await self._send_error(websocket, f"Audio processing error: {str(e)}")
     
-    async def _process_speech_segment(self, websocket: WebSocket, speech_audio: np.ndarray):
+    async def _process_speech_segment(
+        self,
+        websocket: WebSocket,
+        speech_audio: Union[bytes, bytearray, np.ndarray],
+    ) -> None:
         """
         Process a complete speech segment.
         
@@ -265,7 +263,10 @@ class WebSocketManager:
             
             # Transcribe speech
             await self._send_status(websocket, "transcribing", {})
-            transcript, metadata = self.transcriber.transcribe(speech_audio)
+            transcript, metadata = await asyncio.to_thread(
+                self.transcriber.transcribe,
+                speech_audio,
+            )
             
             # Send transcription result
             await websocket.send_json({
@@ -308,7 +309,10 @@ class WebSocketManager:
                 
                 # Get LLM response with vision-aware context
                 await self._send_status(websocket, "processing_llm", {"has_vision_context": True})
-                llm_response = self.llm_client.get_response(enhanced_transcript, self.system_prompt)
+                llm_response = await self.llm_client.get_response(
+                    enhanced_transcript,
+                    self.system_prompt,
+                )
                 
                 # Clear vision context after use to avoid affecting future non-vision conversations
                 # Only clear after successful processing
@@ -317,7 +321,10 @@ class WebSocketManager:
             else:
                 # Normal non-vision processing
                 await self._send_status(websocket, "processing_llm", {})
-                llm_response = self.llm_client.get_response(transcript, self.system_prompt)
+                llm_response = await self.llm_client.get_response(
+                    transcript,
+                    self.system_prompt,
+                )
             
             # Send LLM response
             await websocket.send_json({
@@ -552,7 +559,12 @@ class WebSocketManager:
             # Get response from LLM without adding to conversation history, with moderate temperature
             # Use instruction as user message, not as system message
             logger.info("Generating greeting")
-            llm_response = self.llm_client.get_response(instruction, self.system_prompt, add_to_history=False, temperature=0.7)
+            llm_response = await self.llm_client.get_response(
+                instruction,
+                self.system_prompt,
+                add_to_history=False,
+                temperature=0.7,
+            )
             
             # Restore saved conversation history
             self.llm_client.conversation_history = saved_history
@@ -611,7 +623,12 @@ class WebSocketManager:
             
             # Generate the follow-up with the silence indicator as user input
             logger.info(f"Generating contextual follow-up (tier {tier+1})")
-            llm_response = self.llm_client.get_response(user_input, self.system_prompt, add_to_history=False, temperature=0.7)
+            llm_response = await self.llm_client.get_response(
+                user_input,
+                self.system_prompt,
+                add_to_history=False,
+                temperature=0.7,
+            )
             
             # Restore original conversation history
             self.llm_client.conversation_history = full_history
@@ -1187,7 +1204,7 @@ class WebSocketManager:
 
 async def websocket_endpoint(
     websocket: WebSocket,
-    transcriber: WhisperTranscriber,
+    transcriber: SpeechTranscriber,
     llm_client: LLMClient,
     tts_client: TTSClient
 ):
