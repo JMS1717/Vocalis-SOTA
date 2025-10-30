@@ -29,7 +29,7 @@ call deactivate >nul 2>&1
 set "BACKEND_TITLE=Vocalis Backend"
 set "FRONTEND_TITLE=Vocalis Frontend"
 
-start "%BACKEND_TITLE%" cmd /k "cd /d \"%SCRIPT_DIR%\" && call env\Scripts\activate && python -m backend.main"
+start "%BACKEND_TITLE%" cmd /k "cd /d \"%SCRIPT_DIR%\" && call env\Scripts\activate.bat && python -m backend.main"
 
 rem Allow backend a moment to start before launching the frontend
 ping 127.0.0.1 -n 3 >nul
