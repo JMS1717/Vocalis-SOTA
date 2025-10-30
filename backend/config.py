@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict, Optional, List
 
 from dotenv import load_dotenv
@@ -12,6 +13,12 @@ load_dotenv()
 
 # Logger for configuration warnings
 logger = logging.getLogger(__name__)
+
+# Repository paths
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+MODEL_CACHE_DIR = Path(
+    os.getenv("MODEL_CACHE_DIR", str(_REPO_ROOT / "models"))
+).expanduser().resolve()
 
 
 def _load_json_env(var_name: str, default: Dict[str, Any]) -> Dict[str, Any]:
@@ -174,6 +181,7 @@ def get_config() -> Dict[str, Any]:
         "vad_threshold": VAD_THRESHOLD,
         "vad_buffer_size": VAD_BUFFER_SIZE,
         "audio_sample_rate": AUDIO_SAMPLE_RATE,
+        "model_cache_dir": str(MODEL_CACHE_DIR),
         "available_models": get_available_models(),
     }
 
@@ -186,7 +194,7 @@ def set_stt_model(model_id: str, generation_config: Optional[Dict[str, Any]] = N
     STT_MODEL_ID = model_id
 
     if generation_config is not None:
-        STT_GENERATION_CONFIG = generation_config
+        STT_GENERATION_CONFIG = dict(generation_config)
 
 
 def set_tts_model(
@@ -214,7 +222,7 @@ def set_tts_model(
         TTS_FORMAT = output_format
 
     if inference_params is not None:
-        TTS_INFERENCE_PARAMS = inference_params
+        TTS_INFERENCE_PARAMS = dict(inference_params)
 
     if api_endpoint is not None:
         TTS_API_ENDPOINT = api_endpoint

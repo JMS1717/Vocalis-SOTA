@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, Optional, Union
 
 import numpy as np
 import torch
@@ -24,16 +25,21 @@ class SpeechTranscriber:
         torch_dtype: Optional[str] = None,
         sample_rate: int = 16_000,
         generation_config: Optional[Dict[str, Any]] = None,
+        cache_dir: Optional[Union[str, Path]] = None,
     ) -> None:
         self.model_id = model_id
         self.sample_rate = sample_rate
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.torch_dtype = self._resolve_dtype(torch_dtype)
         self.generation_config = generation_config or {"max_new_tokens": 256}
+        self.cache_dir = Path(cache_dir).expanduser().resolve() if cache_dir else None
+
+        self.model_source = self._resolve_model_source(self.model_id)
 
         logger.info(
-            "Loading speech model %s on %s (dtype=%s)",
+            "Loading speech model %s from %s on %s (dtype=%s)",
             self.model_id,
+            self.model_source,
             self.device,
             self.torch_dtype,
         )
@@ -44,18 +50,41 @@ class SpeechTranscriber:
             "trust_remote_code": True,
         }
 
+        processor_kwargs: Dict[str, Any] = {"trust_remote_code": True}
+
+        if self.cache_dir:
+            load_kwargs["cache_dir"] = str(self.cache_dir)
+            processor_kwargs["cache_dir"] = str(self.cache_dir)
+
         self.processor = AutoProcessor.from_pretrained(
-            self.model_id,
-            trust_remote_code=True,
+            self.model_source,
+            **processor_kwargs,
         )
         self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
-            self.model_id,
+            self.model_source,
             **load_kwargs,
         )
         self.model.to(self.device)
         self.model.eval()
 
         self.is_processing = False
+
+    def _resolve_model_source(self, model_id: str) -> str:
+        if not self.cache_dir:
+            return model_id
+
+        safe_name = model_id.replace("/", "__")
+        candidate = self.cache_dir / safe_name
+
+        if candidate.exists():
+            return str(candidate)
+
+        logger.info(
+            "Local cache for %s not found at %s; falling back to Hugging Face hub",
+            model_id,
+            candidate,
+        )
+        return model_id
 
     def _resolve_dtype(self, torch_dtype: Optional[str]) -> torch.dtype:
         if torch_dtype:
@@ -149,9 +178,11 @@ class SpeechTranscriber:
     def get_config(self) -> Dict[str, Any]:
         return {
             "model_id": self.model_id,
+            "model_path": self.model_source,
             "device": self.device,
             "torch_dtype": str(self.torch_dtype).split(".")[-1],
             "sample_rate": self.sample_rate,
             "generation_config": self.generation_config,
             "is_processing": self.is_processing,
+            "cache_dir": str(self.cache_dir) if self.cache_dir else None,
         }

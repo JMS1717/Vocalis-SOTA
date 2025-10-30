@@ -93,7 +93,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({ isOpen, onClose }) 
       // Listen for responses
       websocketService.addEventListener(MessageType.SYSTEM_PROMPT, handleSystemPrompt);
       websocketService.addEventListener(MessageType.USER_PROFILE, handleUserProfile);
-      websocketService.addEventListener(MessageType.VISION_SETTINGS as any, handleVisionSettings);
+      websocketService.addEventListener(MessageType.VISION_SETTINGS, handleVisionSettings);
       
       // Request data
       websocketService.getSystemPrompt();
@@ -107,7 +107,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({ isOpen, onClose }) 
       return () => {
         websocketService.removeEventListener(MessageType.SYSTEM_PROMPT, handleSystemPrompt);
         websocketService.removeEventListener(MessageType.USER_PROFILE, handleUserProfile);
-        websocketService.removeEventListener(MessageType.VISION_SETTINGS as any, handleVisionSettings);
+        websocketService.removeEventListener(MessageType.VISION_SETTINGS, handleVisionSettings);
       };
     }
   }, [isOpen, fetchModelOptions]);
@@ -172,12 +172,12 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({ isOpen, onClose }) 
     
     websocketService.addEventListener(MessageType.SYSTEM_PROMPT_UPDATED, handlePromptUpdated);
     websocketService.addEventListener(MessageType.USER_PROFILE_UPDATED, handleProfileUpdated);
-    websocketService.addEventListener(MessageType.VISION_SETTINGS_UPDATED as any, handleVisionSettingsUpdated);
+    websocketService.addEventListener(MessageType.VISION_SETTINGS_UPDATED, handleVisionSettingsUpdated);
     
     return () => {
       websocketService.removeEventListener(MessageType.SYSTEM_PROMPT_UPDATED, handlePromptUpdated);
       websocketService.removeEventListener(MessageType.USER_PROFILE_UPDATED, handleProfileUpdated);
-      websocketService.removeEventListener(MessageType.VISION_SETTINGS_UPDATED as any, handleVisionSettingsUpdated);
+      websocketService.removeEventListener(MessageType.VISION_SETTINGS_UPDATED, handleVisionSettingsUpdated);
     };
   }, [onClose, activeTab]);
   

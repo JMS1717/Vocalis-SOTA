@@ -51,7 +51,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Download Kyutai/Seseme models for local inference")
     parser.add_argument(
         "--cache-dir",
-        default=str(REPO_ROOT / "models"),
+        default=str(config.MODEL_CACHE_DIR),
         help="Directory where models should be stored (default: %(default)s)",
     )
     parser.add_argument(

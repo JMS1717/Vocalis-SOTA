@@ -67,6 +67,7 @@ async def lifespan(app: FastAPI):
         torch_dtype=cfg.get("stt_torch_dtype"),
         sample_rate=cfg["audio_sample_rate"],
         generation_config=cfg["stt_generation_config"],
+        cache_dir=str(config.MODEL_CACHE_DIR),
     )
     
     # Initialize LLM service
@@ -208,21 +209,29 @@ async def select_models(selection: ModelSelection):
             device = option.get("device", config.STT_DEVICE)
             torch_dtype = dtype_override or option.get("torch_dtype", config.STT_TORCH_DTYPE)
 
-            old_transcriber = transcription_service
-            transcription_service = SpeechTranscriber(
-                model_id=option["id"],
-                device=device,
-                torch_dtype=torch_dtype,
-                sample_rate=option.get("sample_rate", config.AUDIO_SAMPLE_RATE),
-                generation_config=generation_config,
-            )
+            current_config = transcription_service.get_config() if transcription_service else {}
+            is_same_model = current_config.get("model_id") == option["id"]
+            is_same_generation = generation_config == config.STT_GENERATION_CONFIG
 
-            config.set_stt_model(option["id"], generation_config)
+            if is_same_model and is_same_generation:
+                logger.info("Requested STT model %s is already active; skipping reload", option["id"])
+            else:
+                old_transcriber = transcription_service
+                transcription_service = SpeechTranscriber(
+                    model_id=option["id"],
+                    device=device,
+                    torch_dtype=torch_dtype,
+                    sample_rate=option.get("sample_rate", config.AUDIO_SAMPLE_RATE),
+                    generation_config=generation_config,
+                    cache_dir=str(config.MODEL_CACHE_DIR),
+                )
 
-            updates["stt"] = transcription_service.get_config()
+                config.set_stt_model(option["id"], generation_config)
 
-            if old_transcriber is not None:
-                del old_transcriber
+                updates["stt"] = transcription_service.get_config()
+
+                if old_transcriber is not None:
+                    del old_transcriber
 
         if selection.tts_model_id:
             option = config.get_tts_option(selection.tts_model_id)
@@ -239,32 +248,42 @@ async def select_models(selection: ModelSelection):
             voice = selection.tts_voice or option.get("voice", config.TTS_VOICE)
 
             api_endpoint = option.get("api_endpoint", config.TTS_API_ENDPOINT)
+            current_tts_config = tts_service.get_config() if tts_service else {}
+            is_same_tts_model = current_tts_config.get("model") == option["id"]
+            is_same_voice = voice == config.TTS_VOICE
+            is_same_provider = provider == config.TTS_PROVIDER
+            is_same_format = output_format == config.TTS_FORMAT
+            is_same_endpoint = api_endpoint == config.TTS_API_ENDPOINT
+            is_same_params = inference_params == config.TTS_INFERENCE_PARAMS
 
-            old_tts = tts_service
-            tts_service = TTSClient(
-                api_endpoint=api_endpoint,
-                model=option["id"],
-                voice=voice,
-                output_format=output_format,
-                provider=provider,
-                api_key=config.TTS_API_KEY,
-                inference_params=inference_params,
-                extra_headers=config.TTS_EXTRA_HEADERS,
-            )
+            if all([is_same_tts_model, is_same_voice, is_same_provider, is_same_format, is_same_endpoint, is_same_params]):
+                logger.info("Requested TTS model %s is already active; skipping reload", option["id"])
+            else:
+                old_tts = tts_service
+                tts_service = TTSClient(
+                    api_endpoint=api_endpoint,
+                    model=option["id"],
+                    voice=voice,
+                    output_format=output_format,
+                    provider=provider,
+                    api_key=config.TTS_API_KEY,
+                    inference_params=inference_params,
+                    extra_headers=config.TTS_EXTRA_HEADERS,
+                )
 
-            config.set_tts_model(
-                option["id"],
-                provider=provider,
-                voice=voice,
-                output_format=output_format,
-                inference_params=inference_params,
-                api_endpoint=api_endpoint,
-            )
+                config.set_tts_model(
+                    option["id"],
+                    provider=provider,
+                    voice=voice,
+                    output_format=output_format,
+                    inference_params=inference_params,
+                    api_endpoint=api_endpoint,
+                )
 
-            updates["tts"] = tts_service.get_config()
+                updates["tts"] = tts_service.get_config()
 
-            if old_tts is not None:
-                old_tts.close()
+                if old_tts is not None:
+                    old_tts.close()
 
     if not updates:
         raise HTTPException(status_code=400, detail="No model changes requested")
