@@ -4,11 +4,14 @@ Vocalis Backend Server
 FastAPI application entry point.
 """
 
+import asyncio
 import logging
 import uvicorn
-from fastapi import FastAPI, WebSocket, Depends, HTTPException
+from fastapi import FastAPI, WebSocket, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from pydantic import BaseModel
+from typing import Optional, Dict, Any
 
 # Import configuration
 from . import config
@@ -33,7 +36,16 @@ logger = logging.getLogger(__name__)
 transcription_service = None
 llm_service = None
 tts_service = None
+service_reload_lock = asyncio.Lock()
 # Vision service is a singleton already initialized in its module
+
+
+class ModelSelection(BaseModel):
+    stt_model_id: Optional[str] = None
+    tts_model_id: Optional[str] = None
+    stt_generation_config: Optional[Dict[str, Any]] = None
+    tts_inference_params: Optional[Dict[str, Any]] = None
+    tts_voice: Optional[str] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -146,13 +158,118 @@ async def get_full_config():
     """Get full configuration."""
     if not all([transcription_service, llm_service, tts_service]) or not vision_service.is_ready():
         raise HTTPException(status_code=503, detail="Services not initialized")
-    
+
     return {
         "transcription": transcription_service.get_config(),
         "llm": llm_service.get_config(),
         "tts": tts_service.get_config(),
         "system": config.get_config()
     }
+
+
+@app.get("/models")
+async def list_models():
+    """Return available model options and current selections."""
+
+    return {
+        "stt": {
+            "current": config.STT_MODEL_ID,
+            "options": config.AVAILABLE_STT_MODELS,
+        },
+        "tts": {
+            "current": config.TTS_MODEL,
+            "options": config.AVAILABLE_TTS_MODELS,
+        },
+    }
+
+
+@app.post("/models/select", status_code=status.HTTP_202_ACCEPTED)
+async def select_models(selection: ModelSelection):
+    """Reload STT and/or TTS services with the requested model identifiers."""
+
+    global transcription_service, tts_service
+
+    updates: Dict[str, Dict[str, Any]] = {}
+
+    async with service_reload_lock:
+        if selection.stt_model_id:
+            option = config.get_stt_option(selection.stt_model_id)
+            if option is None:
+                raise HTTPException(status_code=400, detail="Unknown STT model")
+
+            raw_generation_config = selection.stt_generation_config or option.get(
+                "generation_config",
+                config.STT_GENERATION_CONFIG,
+            )
+            generation_config = dict(raw_generation_config or {})
+
+            dtype_override = generation_config.pop("torch_dtype", None)
+
+            device = option.get("device", config.STT_DEVICE)
+            torch_dtype = dtype_override or option.get("torch_dtype", config.STT_TORCH_DTYPE)
+
+            old_transcriber = transcription_service
+            transcription_service = SpeechTranscriber(
+                model_id=option["id"],
+                device=device,
+                torch_dtype=torch_dtype,
+                sample_rate=option.get("sample_rate", config.AUDIO_SAMPLE_RATE),
+                generation_config=generation_config,
+            )
+
+            config.set_stt_model(option["id"], generation_config)
+
+            updates["stt"] = transcription_service.get_config()
+
+            if old_transcriber is not None:
+                del old_transcriber
+
+        if selection.tts_model_id:
+            option = config.get_tts_option(selection.tts_model_id)
+            if option is None:
+                raise HTTPException(status_code=400, detail="Unknown TTS model")
+
+            inference_params = selection.tts_inference_params or option.get(
+                "inference_params",
+                config.TTS_INFERENCE_PARAMS,
+            )
+
+            provider = option.get("provider", config.TTS_PROVIDER)
+            output_format = option.get("output_format", config.TTS_FORMAT)
+            voice = selection.tts_voice or option.get("voice", config.TTS_VOICE)
+
+            api_endpoint = option.get("api_endpoint", config.TTS_API_ENDPOINT)
+
+            old_tts = tts_service
+            tts_service = TTSClient(
+                api_endpoint=api_endpoint,
+                model=option["id"],
+                voice=voice,
+                output_format=output_format,
+                provider=provider,
+                api_key=config.TTS_API_KEY,
+                inference_params=inference_params,
+                extra_headers=config.TTS_EXTRA_HEADERS,
+            )
+
+            config.set_tts_model(
+                option["id"],
+                provider=provider,
+                voice=voice,
+                output_format=output_format,
+                inference_params=inference_params,
+                api_endpoint=api_endpoint,
+            )
+
+            updates["tts"] = tts_service.get_config()
+
+            if old_tts is not None:
+                old_tts.close()
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No model changes requested")
+
+    return {"status": "accepted", "updated": updates}
 
 # WebSocket route
 @app.websocket("/ws")
