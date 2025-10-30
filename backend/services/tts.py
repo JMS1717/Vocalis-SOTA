@@ -51,10 +51,13 @@ class TTSClient:
         self.last_processing_time = 0
 
         logger.info(
-            "Initialized TTS client endpoint=%s model=%s provider=%s",
-            api_endpoint,
-            model,
-            provider,
+            "Initialized TTS Client",
+            extra={
+                "endpoint": api_endpoint,
+                "model": model,
+                "voice": voice,
+                "provider": provider,
+            },
         )
 
     def _build_default_headers(self) -> Dict[str, str]:
@@ -89,10 +92,15 @@ class TTSClient:
             if self.speed and self.speed != 1.0:
                 parameters.setdefault("speed", self.speed)
 
-            return {
+            payload = {
                 "inputs": text,
                 "parameters": {k: v for k, v in parameters.items() if v is not None},
             }
+
+            if self.model:
+                payload.setdefault("model", self.model)
+
+            return payload
 
         payload = {
             "model": self.model,
@@ -225,10 +233,12 @@ class TTSClient:
             payload = self._build_payload(text)
 
             logger.info(
-                "Sending TTS request chars=%d provider=%s endpoint=%s",
-                len(text),
-                self.provider,
-                self.api_endpoint,
+                "Sending TTS request",
+                extra={
+                    "chars": len(text),
+                    "provider": self.provider,
+                    "endpoint": self.api_endpoint,
+                },
             )
 
             response = self.session.post(
@@ -278,10 +288,12 @@ class TTSClient:
             payload = self._build_payload(text)
 
             logger.info(
-                "Sending streaming TTS request chars=%d provider=%s endpoint=%s",
-                len(text),
-                self.provider,
-                self.api_endpoint,
+                "Sending streaming TTS request",
+                extra={
+                    "chars": len(text),
+                    "provider": self.provider,
+                    "endpoint": self.api_endpoint,
+                },
             )
 
             with self.session.post(
