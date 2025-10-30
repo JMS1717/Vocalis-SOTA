@@ -5,12 +5,12 @@ Handles communication with the local LLM API endpoint.
 """
 
 import json
-import requests
 import logging
+import time
 from typing import Dict, Any, List, Optional
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+import requests
+
 logger = logging.getLogger(__name__)
 
 class LLMClient:
@@ -49,7 +49,7 @@ class LLMClient:
         self.is_processing = False
         self.conversation_history = []
         
-        logger.info(f"Initialized LLM Client with endpoint={api_endpoint}")
+        logger.info("Initialized LLM client endpoint=%s", api_endpoint)
         
     def add_to_history(self, role: str, content: str) -> None:
         """
@@ -90,7 +90,7 @@ class LLMClient:
             Dictionary containing the LLM response and metadata
         """
         self.is_processing = True
-        start_time = logging.Formatter.converter()
+        start_time = time.perf_counter()
         
         try:
             # Prepare messages
@@ -131,17 +131,21 @@ class LLMClient:
             
             # Log the full payload (truncated for readability)
             payload_str = json.dumps(payload)
-            logger.info(f"Sending request to LLM API with {len(messages)} messages")
+            logger.info("Sending request to LLM API with %d messages", len(messages))
             
             # Add more detailed logging to help debug message duplication
             message_roles = [msg["role"] for msg in messages]
             user_message_count = message_roles.count("user")
-            logger.info(f"Message roles: {message_roles}, user messages: {user_message_count}")
+            logger.debug(
+                "LLM payload roles=%s user_messages=%d",
+                message_roles,
+                user_message_count,
+            )
             
             if len(payload_str) > 500:
-                logger.debug(f"Payload (truncated): {payload_str[:500]}...")
+                logger.debug("Payload (truncated): %s...", payload_str[:500])
             else:
-                logger.debug(f"Payload: {payload_str}")
+                logger.debug("Payload: %s", payload_str)
             
             # Send request to LLM API
             response = requests.post(
@@ -164,10 +168,12 @@ class LLMClient:
                 self.add_to_history("assistant", assistant_message)
             
             # Calculate processing time
-            end_time = logging.Formatter.converter()
-            processing_time = end_time[0] - start_time[0]
-            
-            logger.info(f"Received response from LLM API after {processing_time:.2f}s")
+            processing_time = time.perf_counter() - start_time
+
+            logger.info(
+                "Received response from LLM API after %.2fs",
+                processing_time,
+            )
             
             return {
                 "text": assistant_message,
