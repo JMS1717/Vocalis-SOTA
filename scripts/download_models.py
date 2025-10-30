@@ -11,11 +11,10 @@ from typing import Iterable, Dict, Any, Set
 
 from huggingface_hub import snapshot_download
 
+# Add the project root to the Python path to allow importing backend module
 REPO_ROOT = Path(__file__).resolve().parent.parent
-BACKEND_PATH = REPO_ROOT / "backend"
-
-if str(BACKEND_PATH) not in sys.path:
-    sys.path.insert(0, str(BACKEND_PATH))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from backend import config  # noqa: E402
 
