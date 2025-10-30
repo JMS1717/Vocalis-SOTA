@@ -104,7 +104,9 @@ A sophisticated AI assistant with speech-to-speech capabilities built on a moder
 #### Windows
 1. Run `setup.bat` to initialise the project (one-time setup)
    - Includes option for CUDA or CPU-only PyTorch installation
+   - Prompts for a Hugging Face token so gated Kyutai/Seseme models can download automatically (press Enter to skip)
 2. Run `run.bat` to start both frontend and backend servers
+   - If a Hugging Face token is missing, the launcher will ask for one before downloading models
 3. If you need to update dependencies later, use `install-deps.bat`
 
 #### macOS/Linux
