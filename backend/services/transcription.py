@@ -99,8 +99,9 @@ class SpeechTranscriber:
             return torch.float16
         return torch.float32
 
-    @staticmethod
     def _normalize_audio(self, audio: np.ndarray) -> np.ndarray:
+        """Normalize numeric audio arrays to float32 in the [-1, 1] range."""
+
         if audio.dtype == np.float32:
             normalized = audio
         elif audio.dtype == np.int16:
