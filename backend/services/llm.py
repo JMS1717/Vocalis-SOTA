@@ -5,9 +5,11 @@ Handles communication with the local LLM API endpoint.
 """
 
 import json
-import requests
 import logging
+import time
 from typing import Dict, Any, List, Optional
+
+import requests
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -90,7 +92,7 @@ class LLMClient:
             Dictionary containing the LLM response and metadata
         """
         self.is_processing = True
-        start_time = logging.Formatter.converter()
+        start_time = time.perf_counter()
         
         try:
             # Prepare messages
@@ -164,9 +166,8 @@ class LLMClient:
                 self.add_to_history("assistant", assistant_message)
             
             # Calculate processing time
-            end_time = logging.Formatter.converter()
-            processing_time = end_time[0] - start_time[0]
-            
+            processing_time = time.perf_counter() - start_time
+
             logger.info(f"Received response from LLM API after {processing_time:.2f}s")
             
             return {

@@ -62,33 +62,7 @@ export interface Session {
 }
 
 // Event types
-type WebSocketEventType = 
-  | 'open'
-  | 'close'
-  | 'error'
-  | 'audio'
-  | 'transcription'
-  | 'llm_response'
-  | 'tts_start'
-  | 'tts_chunk'
-  | 'tts_end'
-  | 'status'
-  | 'ping'
-  | 'pong'
-  | 'error'
-  | 'system_prompt'
-  | 'system_prompt_updated'
-  | 'user_profile'
-  | 'user_profile_updated'
-  | 'save_session_result'
-  | 'load_session_result'
-  | 'list_sessions_result'
-  | 'delete_session_result'
-  | 'vision_settings'
-  | 'vision_settings_updated'
-  | 'vision_file_upload_result'
-  | 'vision_processing'
-  | 'vision_ready';
+type WebSocketEventType = MessageType | 'open' | 'close' | 'error';
 
 // WebSocket state
 export enum ConnectionState {

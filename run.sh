@@ -3,6 +3,17 @@
 
 echo "=== Starting Vocalis ==="
 
+if [ -f "./env/bin/activate" ]; then
+    echo "=== Ensuring required speech models are available ==="
+    source ./env/bin/activate
+    python scripts/download_models.py || echo "[WARN] Some models failed to download. Check your Hugging Face credentials."
+    if command -v deactivate >/dev/null 2>&1; then
+        deactivate
+    fi
+else
+    echo "[WARN] Python virtual environment not found. Run ./setup.sh before starting services."
+fi
+
 # Determine which terminal command to use based on OS and available commands
 terminal_cmd=""
 if [ "$(uname)" == "Darwin" ]; then

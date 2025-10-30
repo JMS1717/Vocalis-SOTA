@@ -15,7 +15,7 @@ from fastapi import WebSocket, WebSocketDisconnect, BackgroundTasks
 from pydantic import BaseModel
 from datetime import datetime
 
-from ..services.transcription import WhisperTranscriber
+from ..services.transcription import SpeechTranscriber
 from ..services.llm import LLMClient
 from ..services.tts import TTSClient
 from ..services.conversation_storage import ConversationStorage
@@ -66,7 +66,7 @@ class WebSocketManager:
     
     def __init__(
         self,
-        transcriber: WhisperTranscriber,
+        transcriber: SpeechTranscriber,
         llm_client: LLMClient,
         tts_client: TTSClient
     ):
@@ -1187,7 +1187,7 @@ class WebSocketManager:
 
 async def websocket_endpoint(
     websocket: WebSocket,
-    transcriber: WhisperTranscriber,
+    transcriber: SpeechTranscriber,
     llm_client: LLMClient,
     tts_client: TTSClient
 ):
